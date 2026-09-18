@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SQL Quest — Learn SQL from zero to expert</title>
+<meta name="description" content="An offline, self-contained course that teaches SQL from the very first SELECT to window functions, recursion and query tuning — with a real SQLite engine in the browser." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗄️</text></svg>" />
+<link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#view">Skip to content</a>
+
+  <header class="topbar">
+    <button class="icon-btn menu-btn" id="menu-btn" aria-label="Toggle navigation">☰</button>
+    <a class="brand" href="#/">
+      <span class="brand-mark">◧</span>
+      <span class="brand-text">SQL&nbsp;Quest</span>
+    </a>
+
+    <nav class="top-nav">
+      <a href="#/" data-nav="home">Dashboard</a>
+      <a href="#/playground" data-nav="playground">Playground</a>
+      <a href="#/schema" data-nav="schema">Schema</a>
+      <a href="#/reference" data-nav="reference">Reference</a>
+      <a href="#/progress" data-nav="progress">Progress</a>
+    </nav>
+
+    <button class="search-btn" id="search-btn" title="Search lessons (press /)">
+      <span>Search lessons</span><kbd>/</kbd>
+    </button>
+
+    <div class="top-progress" id="top-progress" title="Course progress">
+      <svg viewBox="0 0 36 36" class="ring" aria-hidden="true">
+        <circle class="ring-bg" cx="18" cy="18" r="15.5" />
+        <circle class="ring-fg" cx="18" cy="18" r="15.5" id="ring-fg" />
+      </svg>
+      <span id="ring-label">0%</span>
+    </div>
+
+    <button class="icon-btn" id="theme-btn" aria-label="Toggle colour theme" title="Toggle theme">◐</button>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" aria-label="Curriculum">
+      <div class="sidebar-inner" id="sidebar-inner">
+        <div class="sidebar-loading">Loading curriculum…</div>
+      </div>
+    </aside>
+    <main class="view" id="view" tabindex="-1">
+      <div class="boot">
+        <div class="boot-card">
+          <div class="spinner"></div>
+          <h1>Starting the database engine…</h1>
+          <p>A complete SQLite engine is being loaded into this page. Nothing leaves your browser.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="palette-backdrop" id="palette-backdrop" hidden>
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Search lessons">
+      <input type="text" id="palette-input" placeholder="Search lessons, keywords, SQL clauses…" autocomplete="off" spellcheck="false" />
+      <ul class="palette-results" id="palette-results"></ul>
+      <div class="palette-foot"><kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>↵</kbd> open · <kbd>esc</kbd> close</div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+  <script src="vendor/sqljs/sql-wasm.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
