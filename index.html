@@ -20,15 +20,27 @@
 
     <nav class="top-nav">
       <a href="#/" data-nav="home">Dashboard</a>
+      <a href="#/review" data-nav="review">Recall<span class="nav-badge" id="review-badge" hidden>0</span></a>
       <a href="#/playground" data-nav="playground">Playground</a>
       <a href="#/schema" data-nav="schema">Schema</a>
       <a href="#/reference" data-nav="reference">Reference</a>
       <a href="#/progress" data-nav="progress">Progress</a>
+      <a href="#/science" data-nav="science">Why it works</a>
     </nav>
 
     <button class="search-btn" id="search-btn" title="Search lessons (press /)">
       <span>Search lessons</span><kbd>/</kbd>
     </button>
+
+    <a class="hud-streak" href="#/progress" id="hud-streak" title="Day streak">
+      <span class="flame">🔥</span><b>0</b>
+    </a>
+
+    <a class="hud-level" href="#/progress" id="hud-level" title="Level and XP">
+      <span class="hud-lvl" id="hud-lvl">Lv 1</span>
+      <span class="hud-xpbar"><i id="hud-xpbar-fill"></i></span>
+      <span class="hud-xp" id="hud-xp">0 XP</span>
+    </a>
 
     <div class="top-progress" id="top-progress" title="Course progress">
       <svg viewBox="0 0 36 36" class="ring" aria-hidden="true">

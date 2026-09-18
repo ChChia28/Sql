@@ -10,7 +10,8 @@ import { createEditor, clearDraft } from "../editor.js";
 import { execIsolated } from "../db.js";
 import { gradeExercise, explainSqlError } from "../grader.js";
 import * as store from "../store.js";
-import { attachRunButtons, toast } from "../ui.js";
+import { attachRunButtons, toast, xpFloat, confetti, levelUpBanner, cardReveal, questToast } from "../ui.js";
+import { awardExercise, breakCombo, scheduleReview, awardEvent, completeLesson } from "../game.js";
 
 function exerciseShell(exercise, number) {
   const solved = store.isSolved(exercise.id);
@@ -34,7 +35,31 @@ function exerciseShell(exercise, number) {
     </section>`;
 }
 
-function mountExercise(root, exercise, lesson) {
+/** Show everything a solved exercise earned, one beat at a time. */
+function celebrate(award, { anchor, root }) {
+  if (award.xp > 0) xpFloat(anchor, `+${award.xp} XP`, award.doubled ? "big" : "");
+  confetti(root, award.doubled ? 34 : 18);
+  if (award.doubled) toast("Lucky roll — double XP on that one", "ok");
+  if (award.frozenDay) toast("A streak freeze covered your missed day", "warn");
+  for (const quest of award.quests || []) questToast(quest);
+  if (award.card && award.levelUp) cardReveal(award.card, () => levelUpBanner(award.levelUp));
+  else if (award.card) cardReveal(award.card);
+  else if (award.levelUp) levelUpBanner(award.levelUp);
+}
+
+/** When the last exercise of a lesson falls, mark the lesson done. */
+function maybeFinishLesson(lesson, anchor) {
+  const ids = (lesson.exercises || []).map((e) => e.id);
+  if (!ids.length || !ids.every((id) => store.isSolved(id))) return;
+  const award = completeLesson(lesson.id);
+  if (!award) return;
+  toast(`Lesson complete — ${lesson.title}. +${award.xp} XP`, "ok");
+  confetti(anchor, 26);
+  for (const quest of award.quests || []) questToast(quest);
+  if (award.levelUp) levelUpBanner(award.levelUp);
+}
+
+function mountExercise(root, exercise, lesson, mod) {
   const feedback = root.querySelector('[data-role="feedback"]');
   const hintBox = root.querySelector('[data-role="hints"]');
   const statusPill = root.querySelector('[data-role="status"]');
@@ -117,20 +142,44 @@ function mountExercise(root, exercise, lesson) {
           verdict.result && verdict.result.values
             ? resultMeta(verdict.result, verdict.elapsed) + resultTable(verdict.result, { maxRows: 25 })
             : "";
+
+        let award = null;
+        if (isNew) {
+          award = awardExercise({
+            moduleNumber: mod.number,
+            hints: hintsShown,
+            peeked,
+            isNew: true,
+          });
+          scheduleReview(exercise.id, true);   // it joins the recall deck for tomorrow
+        }
+
+        const comboChip =
+          award && award.combo >= 3
+            ? `<span class="combo-chip">${award.combo} in a row · +${Math.round(
+                Math.min(50, 10 * (award.combo - 1))
+              )}% XP</span>`
+            : "";
         feedback.innerHTML = `<div class="msg ok"><strong>Correct.</strong> ${
           hintsShown || peeked ? "Try the next one without help." : "Nicely done."
-        }</div>${extra}`;
-        if (isNew) toast("Exercise solved", "ok");
+        } ${comboChip}</div>${extra}`;
+
+        if (award) {
+          celebrate(award, { anchor: editor.buttons[0].el, root });
+          maybeFinishLesson(lesson, root);
+        }
       } else if (verdict.status === "error") {
         feedback.innerHTML = `<div class="msg err"><strong>${escapeHtml(verdict.title)}</strong><div style="margin-top:6px">${
           verdict.detail
         }</div></div>`;
         store.recordAttempt(exercise.id);
+        breakCombo();
       } else {
         feedback.innerHTML = `<div class="msg warn"><strong>${escapeHtml(verdict.title)}</strong>${
           verdict.detail ? `<div style="margin-top:6px">${verdict.detail}</div>` : ""
         }</div>`;
         store.recordAttempt(exercise.id);
+        breakCombo();
       }
     } catch (err) {
       feedback.innerHTML = `<div class="msg err">${escapeHtml(err.message)}</div>`;
@@ -231,10 +280,63 @@ function wireQuiz(root, lesson) {
       label.addEventListener("click", (event) => {
         event.preventDefault();
         const choice = Number(label.dataset.option);
+        const firstAnswer = store.getQuizAnswer(key) === null;
         store.setQuizAnswer(key, choice);
         reveal(choice);
+        if (firstAnswer) {
+          const award = awardEvent("quiz");
+          if (award.xp) xpFloat(label, `+${award.xp} XP`);
+          for (const quest of award.quests || []) questToast(quest);
+          if (award.levelUp) levelUpBanner(award.levelUp);
+        }
       });
     }
+  }
+}
+
+/**
+ * Ask one quiz question *before* the lesson is read, and withhold the answer
+ * until the end. A wrong guess you care about is the cheapest way to make the
+ * explanation stick — the curiosity gap does the encoding work for you.
+ */
+function predictionCard(lesson) {
+  if (!lesson.quiz || !lesson.quiz.length) return "";
+  if (store.getQuizAnswer(`${lesson.id}-0`) !== null) return "";
+  const question = lesson.quiz[0];
+  return `
+    <div class="predict" id="predict-card">
+      <div class="reward-kicker">Guess first</div>
+      <p style="font-weight:600;margin-bottom:10px">${escapeHtml(question.q)}</p>
+      ${question.options
+        .map(
+          (option, oi) => `
+        <label class="quiz-opt" data-predict="${oi}">
+          <input type="radio" name="predict-${lesson.id}" value="${oi}" />
+          <span>${escapeHtml(option)}</span>
+        </label>`
+        )
+        .join("")}
+      <p class="faint" style="margin:8px 0 0">No peeking at the answer — you will find out at the end of the lesson.</p>
+    </div>`;
+}
+
+function wirePrediction(container, lesson) {
+  const card = container.querySelector("#predict-card");
+  if (!card) return;
+  for (const label of card.querySelectorAll("[data-predict]")) {
+    label.addEventListener("click", (event) => {
+      event.preventDefault();
+      const choice = Number(label.dataset.predict);
+      store.setQuizAnswer(`${lesson.id}-0`, choice);
+      card.innerHTML = `
+        <div class="reward-kicker">Locked in</div>
+        <p style="margin:0">Your guess is recorded. Read on — the answer is waiting in
+        <strong>Check your understanding</strong> at the end of this lesson.</p>`;
+      const award = awardEvent("quiz");
+      if (award.xp) xpFloat(card, `+${award.xp} XP`);
+      for (const quest of award.quests || []) questToast(quest);
+      if (award.levelUp) levelUpBanner(award.levelUp);
+    });
   }
 }
 
@@ -255,6 +357,7 @@ export default async function renderLesson(container, lessonId) {
     </div>
     <h1>${escapeHtml(lesson.title)}</h1>
     ${lesson.goal ? `<p class="muted" style="margin-top:-.4em">${escapeHtml(lesson.goal)}</p>` : ""}
+    ${predictionCard(lesson)}
     <div class="prose" id="lesson-prose">${renderMarkdown(markdown)}</div>
     ${
       (lesson.exercises || []).length
@@ -281,9 +384,10 @@ export default async function renderLesson(container, lessonId) {
 
   for (const exercise of lesson.exercises || []) {
     const root = container.querySelector(`#ex-${CSS.escape(exercise.id)}`);
-    if (root) mountExercise(root, exercise, lesson);
+    if (root) mountExercise(root, exercise, lesson, mod);
   }
 
+  wirePrediction(container, lesson);
   wireQuiz(container, lesson);
   store.markVisited(lesson.id);
 }

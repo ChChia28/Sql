@@ -8,7 +8,8 @@ import { escapeHtml, resultTable, resultMeta } from "../format.js";
 import { explainSqlError } from "../grader.js";
 import { createEditor } from "../editor.js";
 import * as store from "../store.js";
-import { toast } from "../ui.js";
+import { toast, questToast, levelUpBanner } from "../ui.js";
+import { awardEvent } from "../game.js";
 
 const STARTER = `-- Scratch space. This database keeps your changes until you reset it.
 -- Ctrl/⌘ + Enter runs. Click a table on the left to peek inside it.
@@ -64,6 +65,9 @@ export default async function renderPlayground(container) {
     try {
       const result = await execPlayground(sql);
       store.recordAttempt("playground");
+      const award = awardEvent("playground");
+      for (const quest of award.quests || []) questToast(quest);
+      if (award.levelUp) levelUpBanner(award.levelUp);
       if (!result.results.length) {
         output.innerHTML = `<div class="msg ok">Statement executed — ${result.rowsModified} row${
           result.rowsModified === 1 ? "" : "s"

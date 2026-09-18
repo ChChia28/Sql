@@ -11,6 +11,17 @@ const EMPTY = {
   snippets: [],    // playground saves
   settings: { theme: null },   // null = follow the host/system theme
   stats: { queriesRun: 0, firstSeen: null, days: [] },
+  game: {
+    xp: 0,
+    freezes: 2,        // streak freezes in hand
+    frozen: [],        // days a freeze covered
+    quests: null,      // { day, items: [...], perfectClaimed }
+    session: null,     // { day, xp, solved, combo, bestCombo }
+    reviews: {},       // exerciseId -> { due, interval, ease, reps, lapses }
+    cards: [],         // discovered insight-card ids
+    log: {},           // YYYY-MM-DD -> xp earned that day
+    dailyGoal: 60,
+  },
 };
 
 function clone(value) {
@@ -22,8 +33,13 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (!raw) return clone(EMPTY);
     const parsed = JSON.parse(raw);
-    return { ...clone(EMPTY), ...parsed, settings: { ...EMPTY.settings, ...(parsed.settings || {}) },
-             stats: { ...EMPTY.stats, ...(parsed.stats || {}) } };
+    return {
+      ...clone(EMPTY),
+      ...parsed,
+      settings: { ...EMPTY.settings, ...(parsed.settings || {}) },
+      stats: { ...EMPTY.stats, ...(parsed.stats || {}) },
+      game: { ...clone(EMPTY.game), ...(parsed.game || {}) },
+    };
   } catch {
     return clone(EMPTY);
   }
@@ -122,6 +138,19 @@ export function streak() {
     } else break;
   }
   return count;
+}
+
+/* ---------------------------------------------------------------- game */
+
+export function game() {
+  return state.game;
+}
+
+/** Mutate the game slice and persist once. */
+export function updateGame(mutator) {
+  const result = mutator(state.game);
+  persist();
+  return result;
 }
 
 /* ------------------------------------------------------------ snippets */

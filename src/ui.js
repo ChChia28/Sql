@@ -148,3 +148,101 @@ export function badgeState() {
   };
   return BADGES.map((badge) => ({ ...badge, isEarned: badge.earned(context) }));
 }
+
+/* ------------------------------------------------------- celebrations --- */
+
+const reducedMotion = () =>
+  window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** A "+25 XP" that floats up from the element that earned it. */
+export function xpFloat(anchor, text, kind = "") {
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const el = document.createElement("div");
+  el.className = `xp-float ${kind}`;
+  el.textContent = text;
+  el.style.left = `${rect.left + rect.width / 2}px`;
+  el.style.top = `${rect.top}px`;
+  document.body.append(el);
+  setTimeout(() => el.remove(), reducedMotion() ? 900 : 1500);
+}
+
+/** A short burst of confetti from an element. Skipped for reduced motion. */
+export function confetti(anchor, count = 18) {
+  if (!anchor || reducedMotion()) return;
+  const rect = anchor.getBoundingClientRect();
+  const colours = ["#3fbf9f", "#7c8cff", "#e0a75e", "#e5707a", "#5fc9e0"];
+  for (let i = 0; i < count; i += 1) {
+    const bit = document.createElement("i");
+    bit.className = "confetti-bit";
+    bit.style.left = `${rect.left + rect.width * Math.random()}px`;
+    bit.style.top = `${rect.top + rect.height / 2}px`;
+    bit.style.background = colours[i % colours.length];
+    bit.style.setProperty("--dx", `${(Math.random() - 0.5) * 240}px`);
+    bit.style.setProperty("--dy", `${-120 - Math.random() * 160}px`);
+    bit.style.setProperty("--rot", `${(Math.random() - 0.5) * 720}deg`);
+    bit.style.animationDelay = `${Math.random() * 0.12}s`;
+    document.body.append(bit);
+    setTimeout(() => bit.remove(), 1400);
+  }
+}
+
+function overlay(innerHtml, { onClose = null, autoCloseMs = 0 } = {}) {
+  const back = document.createElement("div");
+  back.className = "reward-backdrop";
+  back.innerHTML = innerHtml;
+  document.body.append(back);
+  const close = () => {
+    back.remove();
+    if (onClose) onClose();
+  };
+  back.addEventListener("click", (event) => {
+    if (event.target === back || event.target.closest("[data-close]")) close();
+  });
+  if (autoCloseMs) setTimeout(close, autoCloseMs);
+  return close;
+}
+
+/** Level-up moment: the biggest visual payoff in the app. */
+export function levelUpBanner(level) {
+  overlay(
+    `<div class="reward-card level-up">
+       <div class="reward-kicker">Level ${level.level}</div>
+       <h2>${escapeHtml(level.title)}</h2>
+       <p class="muted">${
+         level.next
+           ? `${level.toNext} XP to ${escapeHtml(level.next.title)}`
+           : "You have reached the final rank."
+       }</p>
+       <button class="btn primary" data-close>Keep going</button>
+     </div>`,
+    { autoCloseMs: 9000 }
+  );
+  const card = document.querySelector(".reward-card.level-up");
+  confetti(card, 40);
+}
+
+/** The variable-ratio surprise: an insight card joins the collection. */
+export function cardReveal(card, onClose = null) {
+  overlay(
+    `<div class="reward-card insight">
+       <div class="reward-kicker">Insight card found</div>
+       <h2>${escapeHtml(card.title)}</h2>
+       <p>${escapeHtml(card.body)}</p>
+       <div class="row" style="justify-content:center">
+         <a class="btn ghost" href="#/progress" data-close>See collection</a>
+         <button class="btn primary" data-close>Nice</button>
+       </div>
+     </div>`,
+    { autoCloseMs: 14000, onClose }
+  );
+}
+
+export function questToast(quest) {
+  toast(
+    quest.id === "perfect"
+      ? `Perfect day — ${quest.label}. +${quest.bonus} XP and a streak freeze.`
+      : `Quest complete: ${quest.label}. +${quest.bonus} XP`,
+    "ok"
+  );
+}

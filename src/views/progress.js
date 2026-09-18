@@ -5,6 +5,14 @@
 import { MODULES } from "../curriculum/index.js";
 import { escapeHtml } from "../format.js";
 import { courseStats, moduleStats, badgeState, toast } from "../ui.js";
+import {
+  levelFor,
+  totalXp,
+  streakInfo,
+  reviewStats,
+  collectedCards,
+  sessionStats,
+} from "../game.js";
 import * as store from "../store.js";
 
 export default async function renderProgress(container) {
@@ -14,9 +22,35 @@ export default async function renderProgress(container) {
   const unaided = Object.values(state.solved).filter((s) => !s.peeked && !s.hints).length;
   const attempts = Object.values(state.solved).reduce((sum, s) => sum + s.attempts, 0);
 
+  const level = levelFor(totalXp());
+  const streak = streakInfo();
+  const reviews = reviewStats();
+  const cards = collectedCards();
+  const owned = cards.filter((card) => card.owned).length;
+  const session = sessionStats();
+
   container.innerHTML = `
     <div class="breadcrumb"><a href="#/">Dashboard</a> · Progress</div>
     <h1>Your progress</h1>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <span class="pill accent">Level ${level.level}</span>
+        <strong>${escapeHtml(level.title)}</strong>
+        <span class="spacer"></span>
+        <span class="faint">${totalXp()} XP${
+          level.next ? ` · ${level.toNext} to ${escapeHtml(level.next.title)}` : " · top rank"
+        }</span>
+      </div>
+      <div class="bar"><i style="width:${level.pct}%"></i></div>
+      <div class="row" style="margin-top:12px">
+        <span class="faint">Today: ${session.xp} / ${session.goal} XP</span>
+        <span class="spacer"></span>
+        <span class="faint">${streak.days}-day streak · ${streak.freezes} freeze${
+          streak.freezes === 1 ? "" : "s"
+        }${streak.frozen ? ` · ${streak.frozen} day${streak.frozen === 1 ? "" : "s"} covered` : ""}</span>
+      </div>
+    </div>
 
     <div class="stat-grid" style="margin-bottom:22px">
       <div class="stat"><b>${stats.solved} / ${stats.total}</b><span>Exercises solved</span></div>
@@ -44,6 +78,40 @@ export default async function renderProgress(container) {
           <div class="bar"><i style="width:${ms.pct}%"></i></div>
         </div>`;
       }).join("")}
+    </div>
+
+    <h2>Recall deck</h2>
+    <div class="card">
+      <div class="row">
+        <div class="stat" style="border:0;padding:0;background:none">
+          <b>${reviews.due}</b><span>Due now</span>
+        </div>
+        <div class="stat" style="border:0;padding:0;background:none">
+          <b>${reviews.tracked}</b><span>Tracked</span>
+        </div>
+        <div class="stat" style="border:0;padding:0;background:none">
+          <b>${reviews.mature}</b><span>Long intervals</span>
+        </div>
+        <span class="spacer"></span>
+        <a class="btn ${reviews.due ? "primary" : "ghost"}" href="#/review">
+          ${reviews.due ? `Practise ${reviews.due} card${reviews.due === 1 ? "" : "s"}` : "Deck is clear"}
+        </a>
+      </div>
+      <p class="faint" style="margin:10px 0 0">Solved exercises come back at widening intervals —
+      spaced retrieval is the part that makes them stick. <a href="#/science">Why</a>.</p>
+    </div>
+
+    <h2>Insight cards <span class="faint" style="font-size:.8rem">${owned} / ${cards.length}</span></h2>
+    <div class="card-grid" style="margin-bottom:22px">
+      ${cards
+        .map(
+          (card) => `
+        <div class="insight-card ${card.owned ? "" : "locked"}">
+          <b>${card.owned ? escapeHtml(card.title) : "Undiscovered"}</b>
+          <p>${escapeHtml(card.body)}</p>
+        </div>`
+        )
+        .join("")}
     </div>
 
     <h2>Badges</h2>

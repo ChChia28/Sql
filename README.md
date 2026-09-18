@@ -27,6 +27,7 @@ python3 -m http.server 8000     # from this folder
 | **Schema explorer** | columns, keys, row counts, DDL, row previews |
 | **Reference** | one-page cheat sheet with runnable examples |
 | **Progress tracking** | local only; badges, streaks, export/import |
+| **Motivation layer** | XP and levels, daily quests, streak freezes, surprise insight cards, and a spaced-repetition recall deck — each explained in *Why it works* |
 
 ### Curriculum
 
@@ -43,6 +44,30 @@ python3 -m http.server 8000     # from this folder
 
 Every lesson has runnable examples, exercises with progressive hints and a
 reference solution, and most have a short concept quiz.
+
+## The motivation design
+
+Gamification here is built on mechanisms with evidence behind them, and the
+reasoning is exposed to the learner in the app's **Why it works** page
+(`content/science.md`) rather than hidden:
+
+- **Recall deck** — every solved exercise returns at widening intervals and must
+  be written from memory again. Retrieval practice plus spacing is the strongest
+  lever on retention in the whole app, and it doubles as an honest reason to
+  come back tomorrow.
+- **Guess first** — a lesson's quiz question is asked *before* the reading, with
+  the answer withheld until the end (pretesting effect + curiosity gap).
+- **Insight cards** — a variable-ratio surprise on roughly one solve in six. The
+  payload is a real SQL fact, so the collection is knowledge, not trinkets.
+- **Daily quests** — three specific, finishable goals per day; all three earn a
+  bonus and a streak freeze.
+- **Streak with freezes** — a missed day spends a freeze instead of resetting the
+  counter, so one lapse does not end the project.
+- **XP and levels** — competence feedback only: XP cannot be spent or lost, and
+  no content is ever locked behind it.
+
+Deliberately absent: punitive XP loss, gated content, guilt notifications,
+leaderboards against strangers, and timers.
 
 ## How grading works
 
@@ -64,18 +89,21 @@ Nothing is hard-coded, so there is no single "expected answer string" to guess.
 ```
 index.html               app shell
 assets/styles.css        design system (dark + light)
-content/*.md             lesson prose, one file per module (+ reference.md)
+content/*.md             lesson prose per module, reference.md, science.md
 src/
-  main.js                routing, sidebar, search palette, theme
+  main.js                routing, sidebar, search palette, theme, HUD
   db.js                  promise client for the database worker, with timeouts
   worker.js              SQLite (sql.js/WASM) on a background thread
   grader.js              runs and compares answers, explains failures
   editor.js              textarea + syntax-highlight overlay
   format.js              markdown subset, SQL highlighter, result tables
   store.js               progress in localStorage
+  game.js                XP, levels, quests, streaks, spaced repetition
+  cards.js               insight-card deck (the surprise reward)
   ui.js                  toasts, runnable examples, badges
   curriculum/*.js        lesson metadata, exercises, quizzes
-  views/*.js             dashboard, lesson, playground, schema, reference, progress
+  views/*.js             dashboard, lesson, review, playground, schema,
+                         reference, progress, science
 data/seed.sql            the generated sample database
 tools/generate_seed.py   regenerates seed.sql deterministically
 tools/verify.mjs         runs every example and solution in the course

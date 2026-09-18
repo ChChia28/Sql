@@ -9,6 +9,7 @@ import { MODULES, findLesson, searchIndex } from "./curriculum/index.js";
 import { loadModuleContent } from "./content.js";
 import * as store from "./store.js";
 import { courseStats, moduleStats, lessonSolved, toast } from "./ui.js";
+import { levelFor, totalXp, streakInfo, dueReviewIds } from "./game.js";
 import { escapeHtml } from "./format.js";
 
 import renderDashboard from "./views/dashboard.js";
@@ -17,6 +18,8 @@ import renderPlayground from "./views/playground.js";
 import renderSchema from "./views/schema.js";
 import renderReference from "./views/reference.js";
 import renderProgress from "./views/progress.js";
+import renderReview from "./views/review.js";
+import renderScience from "./views/science.js";
 
 const view = document.getElementById("view");
 const sidebarInner = document.getElementById("sidebar-inner");
@@ -93,9 +96,36 @@ function updateRing() {
   document.getElementById("ring-label").textContent = `${pct}%`;
 }
 
+/** Level, XP, streak and the recall badge in the top bar. */
+function updateHud() {
+  const xp = totalXp();
+  const level = levelFor(xp);
+  document.getElementById("hud-lvl").textContent = `Lv ${level.level}`;
+  document.getElementById("hud-xpbar-fill").style.width = `${level.pct}%`;
+  document.getElementById("hud-xp").textContent = `${xp} XP`;
+  document.getElementById("hud-level").title = level.next
+    ? `${level.title} — ${level.toNext} XP to ${level.next.title}`
+    : `${level.title} — top rank`;
+
+  const streak = streakInfo();
+  const streakEl = document.getElementById("hud-streak");
+  streakEl.querySelector("b").textContent = String(streak.days);
+  streakEl.classList.toggle("lit", streak.practisedToday && streak.days > 0);
+  streakEl.classList.toggle("cold", !streak.practisedToday);
+  streakEl.title = `${streak.days}-day streak · ${streak.freezes} freeze${
+    streak.freezes === 1 ? "" : "s"
+  } in hand`;
+
+  const due = dueReviewIds().length;
+  const badge = document.getElementById("review-badge");
+  badge.hidden = due === 0;
+  badge.textContent = String(due);
+}
+
 store.subscribe(() => {
   buildSidebar();
   updateRing();
+  updateHud();
 });
 
 /* ---------------------------------------------------------------- router */
@@ -110,10 +140,12 @@ function currentRoute() {
 const ROUTES = {
   home: renderDashboard,
   lesson: renderLesson,
+  review: renderReview,
   playground: renderPlayground,
   schema: renderSchema,
   reference: renderReference,
   progress: renderProgress,
+  science: renderScience,
 };
 
 async function route() {
@@ -127,6 +159,7 @@ async function route() {
   document.getElementById("sidebar").classList.remove("open");
   buildSidebar();
   updateRing();
+  updateHud();
 
   view.innerHTML = '<div class="boot"><div class="spinner"></div></div>';
   try {
@@ -266,6 +299,7 @@ document.getElementById("menu-btn").addEventListener("click", () => {
 (async function start() {
   buildSidebar();
   updateRing();
+  updateHud();
   try {
     await initEngine();
   } catch (err) {
