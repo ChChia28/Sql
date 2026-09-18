@@ -9,7 +9,7 @@ const EMPTY = {
   visited: {},     // lessonId   -> timestamp
   quiz: {},        // quizKey    -> chosen index
   snippets: [],    // playground saves
-  settings: { theme: "dark" },
+  settings: { theme: null },   // null = follow the host/system theme
   stats: { queriesRun: 0, firstSeen: null, days: [] },
 };
 

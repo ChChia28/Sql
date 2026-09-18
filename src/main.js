@@ -23,16 +23,27 @@ const sidebarInner = document.getElementById("sidebar-inner");
 
 /* ----------------------------------------------------------------- theme */
 
-function applyTheme(theme) {
+/** An explicit choice wins; otherwise follow the host page, then the OS. */
+function preferredTheme() {
+  const saved = store.theme();
+  if (saved === "light" || saved === "dark") return saved;
+  const stamped = document.documentElement.dataset.theme;
+  if (stamped === "light" || stamped === "dark") return stamped;
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
+}
+
+function applyTheme(theme, { remember = true } = {}) {
   document.documentElement.dataset.theme = theme;
-  store.setTheme(theme);
+  if (remember) store.setTheme(theme);
 }
 
 document.getElementById("theme-btn").addEventListener("click", () => {
   applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
 
-applyTheme(store.theme());
+applyTheme(preferredTheme(), { remember: false });
 
 /* --------------------------------------------------------------- sidebar */
 

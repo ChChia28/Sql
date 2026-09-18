@@ -3,6 +3,10 @@
    Thin promise wrapper around the worker, with per-call timeouts. A query
    that never finishes (hello, accidental cross join) gets the worker
    terminated and replaced rather than locking up the browser.
+
+   If Workers are unavailable (some sandboxed embeddings block them), the
+   client falls back to running SQLite on the main thread — same API, but
+   nothing to cancel, so a runaway query blocks the page.
    ===================================================================== */
 
 const DEFAULT_TIMEOUT = 8000;
@@ -11,6 +15,11 @@ let worker = null;
 let seq = 0;
 const pending = new Map();
 let bootPromise = null;
+let localEngine = null;        // set only when the worker is unavailable
+
+export function isLocalMode() {
+  return Boolean(localEngine);
+}
 
 function spawn() {
   worker = new Worker(new URL("./worker.js", import.meta.url));
@@ -33,7 +42,7 @@ function spawn() {
   };
 }
 
-function call(type, payload, timeout = DEFAULT_TIMEOUT) {
+function callWorker(type, payload, timeout) {
   if (!worker) spawn();
   const id = ++seq;
   return new Promise((resolve, reject) => {
@@ -61,9 +70,31 @@ function call(type, payload, timeout = DEFAULT_TIMEOUT) {
   });
 }
 
+function call(type, payload, timeout = DEFAULT_TIMEOUT) {
+  if (localEngine) return localEngine.handle(type, payload);
+  return callWorker(type, payload, timeout);
+}
+
 /** Boot the engine (loads WebAssembly + the sample data). Idempotent. */
 export function initEngine() {
-  if (!bootPromise) bootPromise = call("ping", {}, 60000);
+  if (!bootPromise) {
+    bootPromise = (async () => {
+      try {
+        return await callWorker("ping", {}, 60000);
+      } catch (workerError) {
+        // Workers blocked or broken: run SQLite here instead.
+        try {
+          localEngine = await import("./engine-local.js");
+          return await localEngine.handle("ping");
+        } catch (localError) {
+          localEngine = null;
+          throw new Error(
+            `${workerError.message} (and the main-thread fallback failed: ${localError.message})`
+          );
+        }
+      }
+    })();
+  }
   return bootPromise;
 }
 
