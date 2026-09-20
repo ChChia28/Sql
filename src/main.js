@@ -10,6 +10,7 @@ import { loadModuleContent } from "./content.js";
 import * as store from "./store.js";
 import { courseStats, moduleStats, lessonSolved, toast } from "./ui.js";
 import { levelFor, totalXp, streakInfo, dueReviewIds } from "./game.js";
+import { initPersistence, onStatusChange, status as storageStatus } from "./persist.js";
 import { escapeHtml } from "./format.js";
 
 import renderDashboard from "./views/dashboard.js";
@@ -127,6 +128,26 @@ store.subscribe(() => {
   updateRing();
   updateHud();
 });
+
+/* --------------------------------------------------------------- storage */
+
+/** Tell the learner plainly when progress cannot be saved in this view. */
+function renderStorageBanner(state = storageStatus()) {
+  const existing = document.getElementById("storage-banner");
+  if (state.mode !== "none") {
+    if (existing) existing.remove();
+    return;
+  }
+  if (existing) return;
+  const banner = document.createElement("div");
+  banner.id = "storage-banner";
+  banner.className = "storage-warning";
+  banner.innerHTML = `
+    <strong>This view cannot save your progress.</strong>
+    Storage is blocked here, so anything you solve will be lost when you close the page.
+    <a href="#/progress">Copy a backup</a> before you go, or open the app in a normal browser tab.`;
+  document.querySelector(".layout").before(banner);
+}
 
 /* ---------------------------------------------------------------- router */
 
@@ -300,8 +321,13 @@ document.getElementById("menu-btn").addEventListener("click", () => {
   buildSidebar();
   updateRing();
   updateHud();
+
+  // progress first: the first render should already show real progress
+  const persistence = initPersistence().catch(() => storageStatus());
+  onStatusChange(renderStorageBanner);
+
   try {
-    await initEngine();
+    await Promise.all([initEngine(), persistence]);
   } catch (err) {
     view.innerHTML = `
       <div class="card">
@@ -314,6 +340,10 @@ document.getElementById("menu-btn").addEventListener("click", () => {
       </div>`;
     return;
   }
+  renderStorageBanner();
+  buildSidebar();
+  updateRing();
+  updateHud();
   await route();
   // warm the search index in the background
   ensureIndex().catch(() => {});

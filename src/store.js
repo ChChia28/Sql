@@ -20,6 +20,7 @@ const EMPTY = {
     reviews: {},       // exerciseId -> { due, interval, ease, reps, lapses }
     cards: [],         // discovered insight-card ids
     log: {},           // YYYY-MM-DD -> xp earned that day
+    seeds: [],         // ids of one-off starting points already applied
     dailyGoal: 60,
   },
 };
@@ -182,20 +183,159 @@ export function theme() {
   return state.settings.theme;
 }
 
+/* ---------------------------------------------------------------- merge */
+
+const uniq = (list) => [...new Set(list || [])];
+const minDefined = (a, b) => (a && b ? Math.min(a, b) : a || b);
+
+/**
+ * Combine two progress states without ever losing work: solved exercises,
+ * visited lessons, cards and XP are unioned or maxed, never replaced. Used
+ * both when remote progress arrives and when a backup is restored.
+ */
+export function mergeStates(base, other) {
+  if (!other || typeof other !== "object") return base;
+  const merged = clone(base);
+
+  for (const [id, entry] of Object.entries(other.solved || {})) {
+    const mine = merged.solved[id];
+    merged.solved[id] = mine
+      ? {
+          at: minDefined(mine.at, entry.at),
+          attempts: Math.max(mine.attempts || 0, entry.attempts || 0),
+          hints: Math.max(mine.hints || 0, entry.hints || 0),
+          peeked: Boolean(mine.peeked || entry.peeked),
+        }
+      : entry;
+  }
+
+  for (const [id, at] of Object.entries(other.visited || {})) {
+    merged.visited[id] = minDefined(merged.visited[id], at);
+  }
+
+  for (const [key, choice] of Object.entries(other.quiz || {})) {
+    if (!(key in merged.quiz)) merged.quiz[key] = choice;
+  }
+
+  const byName = new Map(merged.snippets.map((s) => [s.name, s]));
+  for (const snippet of other.snippets || []) {
+    const mine = byName.get(snippet.name);
+    if (!mine || (snippet.at || 0) > (mine.at || 0)) byName.set(snippet.name, snippet);
+  }
+  merged.snippets = [...byName.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 40);
+
+  merged.settings = {
+    ...(other.settings || {}),
+    ...merged.settings,
+    theme: merged.settings.theme || (other.settings || {}).theme || null,
+  };
+
+  const otherStats = other.stats || {};
+  merged.stats = {
+    queriesRun: Math.max(merged.stats.queriesRun || 0, otherStats.queriesRun || 0),
+    firstSeen:
+      merged.stats.firstSeen && otherStats.firstSeen
+        ? [merged.stats.firstSeen, otherStats.firstSeen].sort()[0]
+        : merged.stats.firstSeen || otherStats.firstSeen || null,
+    days: uniq([...(merged.stats.days || []), ...(otherStats.days || [])]).sort(),
+  };
+
+  const mineGame = merged.game;
+  const theirGame = other.game || {};
+  mineGame.xp = Math.max(mineGame.xp || 0, theirGame.xp || 0);
+  mineGame.freezes = Math.max(mineGame.freezes || 0, theirGame.freezes || 0);
+  mineGame.frozen = uniq([...(mineGame.frozen || []), ...(theirGame.frozen || [])]).sort();
+  mineGame.cards = uniq([...(mineGame.cards || []), ...(theirGame.cards || [])]);
+  mineGame.lessonsDone = uniq([
+    ...(mineGame.lessonsDone || []),
+    ...(theirGame.lessonsDone || []),
+  ]);
+  mineGame.seeds = uniq([...(mineGame.seeds || []), ...(theirGame.seeds || [])]);
+  mineGame.dailyGoal = mineGame.dailyGoal !== 60 ? mineGame.dailyGoal : theirGame.dailyGoal || 60;
+
+  const log = { ...(theirGame.log || {}) };
+  for (const [day, xp] of Object.entries(mineGame.log || {})) {
+    log[day] = Math.max(log[day] || 0, xp);
+  }
+  mineGame.log = log;
+
+  const reviews = { ...(theirGame.reviews || {}) };
+  for (const [id, card] of Object.entries(mineGame.reviews || {})) {
+    const theirs = reviews[id];
+    reviews[id] =
+      !theirs || (card.reps || 0) >= (theirs.reps || 0) ? card : theirs;
+  }
+  mineGame.reviews = reviews;
+
+  // today's quests and session: keep whichever has made more progress today
+  const progressOf = (quests) =>
+    (quests && quests.items ? quests.items : []).reduce((sum, q) => sum + (q.progress || 0), 0);
+  if (
+    theirGame.quests &&
+    (!mineGame.quests ||
+      (theirGame.quests.day === mineGame.quests.day &&
+        progressOf(theirGame.quests) > progressOf(mineGame.quests)))
+  ) {
+    mineGame.quests = theirGame.quests;
+  }
+  if (
+    theirGame.session &&
+    (!mineGame.session ||
+      (theirGame.session.day === mineGame.session.day &&
+        (theirGame.session.xp || 0) > (mineGame.session.xp || 0)))
+  ) {
+    mineGame.session = theirGame.session;
+  }
+
+  return merged;
+}
+
+/** Merge an incoming state into the current one and persist. */
+export function mergeIn(incoming) {
+  state = mergeStates(state, incoming);
+  persist();
+  return state;
+}
+
 /* ------------------------------------------------------- import/export */
 
 export function exportProgress() {
   return JSON.stringify(state, null, 2);
 }
 
-export function importProgress(json) {
-  const parsed = JSON.parse(json);
+/**
+ * Restore a backup. The payload may be a bare state or the wrapper the
+ * backup file uses. Merging (the default) can only add progress; pass
+ * `{ merge: false }` to replace outright.
+ */
+export function importProgress(json, { merge = true } = {}) {
+  const parsed = typeof json === "string" ? JSON.parse(json) : json;
   if (!parsed || typeof parsed !== "object") throw new Error("Not a progress file");
-  state = { ...clone(EMPTY), ...parsed };
+  const incoming = parsed.state && typeof parsed.state === "object" ? parsed.state : parsed;
+  if (!incoming.solved && !incoming.game && !incoming.visited) {
+    throw new Error("That does not look like a SQL Quest backup");
+  }
+  state = merge
+    ? mergeStates(state, incoming)
+    : { ...clone(EMPTY), ...incoming, game: { ...clone(EMPTY.game), ...(incoming.game || {}) } };
   persist();
+  return state;
+}
+
+/** The backup payload: the state plus a little provenance. */
+export function backupPayload() {
+  return {
+    app: "sql-quest",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    state,
+  };
 }
 
 export function resetProgress() {
+  // one-off seeds already granted stay consumed, or a reset would undo itself
+  const seeds = [...(state.game.seeds || [])];
   state = clone(EMPTY);
+  state.game.seeds = seeds;
   persist();
 }

@@ -14,6 +14,7 @@ import {
   sessionStats,
 } from "../game.js";
 import * as store from "../store.js";
+import { status as storageStatus, flush, saveBackupFile, copyText } from "../persist.js";
 
 export default async function renderProgress(container) {
   const stats = courseStats();
@@ -28,6 +29,7 @@ export default async function renderProgress(container) {
   const cards = collectedCards();
   const owned = cards.filter((card) => card.owned).length;
   const session = sessionStats();
+  const storage = storageStatus();
 
   container.innerHTML = `
     <div class="breadcrumb"><a href="#/">Dashboard</a> · Progress</div>
@@ -127,53 +129,126 @@ export default async function renderProgress(container) {
         .join("")}
     </div>
 
-    <h2 style="margin-top:26px">Your data</h2>
+    <h2 style="margin-top:26px">Backup &amp; restore</h2>
     <div class="card">
-      <p class="muted">Progress is stored in this browser only. Export it to move to another machine, or
-      wipe it to start the course fresh.</p>
-      <div class="row">
-        <button class="btn" id="export-btn">⭳ Export progress</button>
-        <button class="btn" id="import-btn">⭱ Import progress</button>
-        <button class="btn ghost" id="reset-btn">Reset everything</button>
+      <div class="row" style="margin-bottom:10px">
+        <span class="storage-pill ${storage.mode}"><span class="dot"></span>${escapeHtml(
+          storage.label
+        )}</span>
+        <span class="spacer"></span>
+        <span class="faint">${stats.solved} solved · ${totalXp()} XP · ${
+          Object.keys(state.game.reviews || {}).length
+        } recall cards</span>
       </div>
-      <textarea id="import-box" hidden rows="6" spellcheck="false"
-        style="width:100%;margin-top:12px;font-family:var(--mono);font-size:.8rem;padding:10px;
-               border-radius:8px;border:1px solid var(--border);background:var(--bg-input);color:var(--text)"
-        placeholder="Paste an exported progress file here, then press Import again."></textarea>
+      <p class="muted" style="margin-bottom:0">${
+        storage.mode === "cloud"
+          ? "Your progress is stored against your Claude account, so it survives closing this page and follows you to other devices."
+          : storage.mode === "local"
+            ? "Your progress lives in this browser's storage. It survives reloads here, but not a different browser, device or private window — keep a backup code if this matters."
+            : "<strong>Nothing is being stored in this view.</strong> Copy the backup code below before you close the page, and paste it back in to carry on."
+      }</p>
+    </div>
+
+    <div class="card">
+      <h3>1 · Take a backup</h3>
+      <p class="muted">Everything — solved exercises, XP, streak, recall schedule, insight cards — in one code.</p>
+      <div class="row">
+        <button class="btn primary" id="copy-btn">⧉ Copy backup code</button>
+        <button class="btn" id="file-btn">⭳ Save as file</button>
+        <button class="btn ghost" id="show-btn">Show the code</button>
+      </div>
+      <textarea class="backup-box" id="backup-box" rows="4" readonly spellcheck="false" hidden></textarea>
+    </div>
+
+    <div class="card">
+      <h3>2 · Restore a backup</h3>
+      <p class="muted">Paste a backup code and press Restore. Restoring <strong>merges</strong> — it can only
+      add progress, never remove what you have already done.</p>
+      <textarea class="backup-box" id="restore-box" rows="4" spellcheck="false"
+        placeholder="Paste your backup code here…"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="restore-btn">⭱ Restore</button>
+        <span class="faint" id="restore-note"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Start over</h3>
+      <p class="muted">Deletes all progress, badges, recall cards and saved snippets in this browser.</p>
+      <button class="btn ghost" id="reset-btn">Reset everything</button>
     </div>`;
 
-  container.querySelector("#export-btn").addEventListener("click", () => {
-    const blob = new Blob([store.exportProgress()], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "sql-quest-progress.json";
-    link.click();
-    URL.revokeObjectURL(url);
-    toast("Progress exported", "ok");
+  const backupText = () => JSON.stringify(store.backupPayload(), null, 2);
+  const box = container.querySelector("#backup-box");
+  const note = container.querySelector("#restore-note");
+
+  container.querySelector("#show-btn").addEventListener("click", () => {
+    box.value = backupText();
+    box.hidden = !box.hidden;
+    if (!box.hidden) box.select();
   });
 
-  const box = container.querySelector("#import-box");
-  container.querySelector("#import-btn").addEventListener("click", () => {
-    if (box.hidden) {
+  container.querySelector("#copy-btn").addEventListener("click", async () => {
+    const text = backupText();
+    box.value = text;
+    box.hidden = false;
+    const copied = await copyText(text, box);
+    if (copied) toast("Backup code copied to the clipboard", "ok");
+    else {
+      box.select();
+      toast("Select the text and press Ctrl/⌘ + C to copy it", "warn");
+    }
+  });
+
+  container.querySelector("#file-btn").addEventListener("click", async () => {
+    try {
+      const result = await saveBackupFile("sql-quest-progress.json", backupText());
+      toast(result === "saved" ? "Backup file saved" : "Backup file offered", "ok");
+    } catch (err) {
+      box.value = backupText();
       box.hidden = false;
-      box.focus();
+      box.select();
+      toast(
+        err && err.code === "declined"
+          ? "Save cancelled — the code is shown below instead"
+          : "This view will not save files — copy the code below instead",
+        "warn"
+      );
+    }
+  });
+
+  container.querySelector("#restore-btn").addEventListener("click", async () => {
+    const raw = container.querySelector("#restore-box").value.trim();
+    if (!raw) {
+      note.textContent = "Paste a backup code first.";
       return;
     }
     try {
-      store.importProgress(box.value);
-      toast("Progress imported", "ok");
+      const before = courseStats().solved;
+      store.importProgress(raw);
+      await flush();
+      const after = courseStats().solved;
+      toast(
+        after > before
+          ? `Restored — ${after - before} more exercise${after - before === 1 ? "" : "s"} marked solved`
+          : "Restored — nothing new to add",
+        "ok"
+      );
       renderProgress(container);
     } catch (err) {
-      toast(`Could not import: ${err.message}`, "warn");
+      note.textContent = `Could not restore: ${err.message}`;
     }
   });
 
-  container.querySelector("#reset-btn").addEventListener("click", () => {
-    if (confirm("Delete all progress, badges and saved snippets? This cannot be undone.")) {
-      store.resetProgress();
-      toast("Progress reset");
-      renderProgress(container);
-    }
+  container.querySelector("#reset-btn").addEventListener("click", async () => {
+    const where =
+      storage.mode === "cloud"
+        ? "This clears it here and in your Claude account."
+        : "This cannot be undone.";
+    if (!confirm(`Delete all progress, badges, recall cards and saved snippets? ${where}`)) return;
+    store.resetProgress();
+    await flush();          // push the cleared state, or the next load restores it
+    toast("Progress reset");
+    renderProgress(container);
   });
 }

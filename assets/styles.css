@@ -697,3 +697,34 @@ details.solution .code-block { margin-bottom: .6em; }
 @media (max-width: 960px) {
   .hud-level, .top-progress { display: none; }
 }
+
+/* --------------------------------------------------------- storage state */
+
+.storage-warning {
+  position: sticky; top: var(--topbar-h); z-index: 20;
+  padding: 10px 18px; font-size: .87rem;
+  background: var(--danger-soft); color: var(--danger);
+  border-bottom: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.storage-warning a { color: inherit; text-decoration: underline; font-weight: 700; }
+
+.storage-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 11px; border-radius: 999px; font-size: .78rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-dim);
+}
+.storage-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+.storage-pill.cloud { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.storage-pill.cloud .dot { background: var(--ok); }
+.storage-pill.local { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.storage-pill.local .dot { background: var(--warn); }
+.storage-pill.none { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.storage-pill.none .dot { background: var(--danger); }
+
+.backup-box {
+  width: 100%; margin-top: 12px; padding: 10px 12px;
+  font-family: var(--mono); font-size: .76rem; line-height: 1.45;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-input); color: var(--text-dim); resize: vertical;
+}
+.backup-box:focus { outline: none; border-color: var(--accent); }
