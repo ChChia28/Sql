@@ -193,9 +193,13 @@ const minDefined = (a, b) => (a && b ? Math.min(a, b) : a || b);
  * visited lessons, cards and XP are unioned or maxed, never replaced. Used
  * both when remote progress arrives and when a backup is restored.
  */
-export function mergeStates(base, other) {
-  if (!other || typeof other !== "object") return base;
+export function mergeStates(base, incoming) {
+  if (!incoming || typeof incoming !== "object") return base;
   const merged = clone(base);
+  // Snapshots delivered by the account store are FROZEN, and so is everything
+  // inside them. Copying one into state gives us an object the app cannot
+  // later mutate ("Cannot assign to read only property"), so deep-clone first.
+  const other = clone(incoming);
 
   for (const [id, entry] of Object.entries(other.solved || {})) {
     const mine = merged.solved[id];

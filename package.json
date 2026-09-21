@@ -6,6 +6,7 @@
   "description": "Learn SQL from zero to expert \u2014 a self-contained course running on a real SQLite engine in the browser.",
   "scripts": {
     "start": "python3 -m http.server 8000",
+    "test": "node tools/test-store.mjs && node tools/verify.mjs",
     "verify": "node tools/verify.mjs",
     "verify:verbose": "node tools/verify.mjs --verbose",
     "seed": "python3 tools/generate_seed.py"

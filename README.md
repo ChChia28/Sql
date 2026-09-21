@@ -107,6 +107,7 @@ src/
 data/seed.sql            the generated sample database
 tools/generate_seed.py   regenerates seed.sql deterministically
 tools/verify.mjs         runs every example and solution in the course
+tools/test-store.mjs     progress merge, restore and frozen-snapshot tests
 vendor/sqljs/            sql.js 1.13 (SQLite 3.49) — MIT licensed
 ```
 
@@ -117,6 +118,8 @@ instead of freezing the tab.
 ## Working on the course
 
 ```bash
+npm test                       # store tests + curriculum verification
+node tools/test-store.mjs      # progress merge, backup/restore, frozen-snapshot guard
 node tools/verify.mjs          # execute every example + solution, check metadata
 node tools/verify.mjs --verbose
 python3 tools/generate_seed.py # regenerate data/seed.sql (deterministic)
